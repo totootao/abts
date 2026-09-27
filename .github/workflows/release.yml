@@ -48,6 +48,14 @@ jobs:
       - name: 拉取依赖
         run: flutter pub get
 
+      - name: 修补第三方插件重复类（umeng_common_sdk 同名 Kotlin 空壳）
+        run: |
+          KT="$(find "$HOME/.pub-cache" -path "*umeng_common_sdk*/android/src/main/kotlin/com/umeng/umeng_common_sdk/UmengCommonSdkPlugin.kt" 2>/dev/null | head -1)"
+          if [ -n "$KT" ]; then
+            rm -f "$KT"
+            echo "已移除与 Java 实现重名的 Kotlin 空壳：$KT"
+          fi
+
       - name: 准备签名证书（配置了 Secret 才启用）
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
