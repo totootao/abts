@@ -87,6 +87,8 @@ keyAlias=你的别名
 storeFile=abitingshu.keystore   # 相对 android/app/ 目录
 ```
 
+**自动构建**：推送 `v*` 标签会触发 `.github/workflows/release.yml`，自动构建按架构分包 + 通用包，并创建 GitHub Release 上传 APK。配置仓库 Secret（`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`）即可用正式证书签名，未配置时回退 debug 签名。
+
 ## 项目结构
 
 ```
