@@ -11,6 +11,7 @@ import '../models/chapter.dart';
 import '../player/book_player.dart';
 import '../utils/format.dart';
 import '../widgets/book_cover.dart';
+import '../widgets/speed_sheet.dart';
 
 /// 全屏播放页（PiliPlus 风格）
 class PlayerPage extends StatefulWidget {
@@ -419,10 +420,13 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Widget _buildActionRow(BookPlayer player) {
+    final customSpeed = player.speed != 1.0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 10,
+        runSpacing: 8,
         children: [
           ActionChip(
             avatar:  Icon(Icons.format_list_bulleted,
@@ -433,7 +437,24 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
             onPressed: () => _showChapterSheet(player),
           ),
-          const SizedBox(width: 10),
+          ActionChip(
+            avatar: Icon(Icons.speed_rounded,
+                size: 16,
+                color: customSpeed ? AppTheme.accent : AppTheme.textSub),
+            backgroundColor: customSpeed
+                ? AppTheme.accent.withValues(alpha: 0.14)
+                : null,
+            side: customSpeed ? BorderSide(color: AppTheme.accent) : null,
+            label: Text(
+              customSpeed ? '${Fmt.speed(player.speed)} 倍速' : '倍速',
+              style: TextStyle(
+                fontSize: 12,
+                color: customSpeed ? AppTheme.accent : AppTheme.textMain,
+                fontWeight: customSpeed ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+            onPressed: () => showSpeedSheet(context),
+          ),
           ActionChip(
             avatar:  Icon(Icons.bedtime_outlined,
                 size: 16, color: AppTheme.accent),
@@ -445,7 +466,6 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
             onPressed: () => _showSleepSheet(player),
           ),
-          const SizedBox(width: 10),
           ActionChip(
             avatar:  Icon(Icons.share_outlined,
                 size: 16, color: AppTheme.accent),

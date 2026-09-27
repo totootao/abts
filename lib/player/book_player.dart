@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart' hide AudioTrack;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/network/api_config.dart';
 import '../core/storage/shelf_store.dart';
@@ -53,6 +54,25 @@ class BookPlayer extends ChangeNotifier {
   static const double _duckedVolume = 0.05;
   bool _ducking = false;
   double _volumeBeforeDuck = 1.0;
+
+  /// 可选播放倍速（听书常用区间，变速不变调）
+  static const List<double> speedOptions = <double>[
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    1.75,
+    2.0,
+    2.5,
+    3.0,
+  ];
+  static const double _defaultSpeed = 1.0;
+  static const String _speedKey = 'abts_playback_speed';
+
+  /// 当前播放倍速（持久化，换章与重启后保持）
+  double _speed = _defaultSpeed;
+  double get speed => _speed;
 
   Player get player => _player;
   Book? get book => _book;
@@ -142,6 +162,9 @@ class BookPlayer extends ChangeNotifier {
         unawaited(_restoreAfterFocusGain());
       }
       ..start();
+
+    // 恢复上次选择的倍速（本地读取，失败则保持 1.0×）
+    unawaited(_restoreSpeed());
   }
 
   /// 系统打断（来电等）导致的暂停：不放弃焦点，等待 GAIN 后自动续播
@@ -286,6 +309,8 @@ class BookPlayer extends ChangeNotifier {
           if (resumeMs > 0) {
             await _seekToResume(resumeMs);
           }
+          // 换源后重新下发倍速：部分设备 open() 会把播放速率重置为 1.0
+          if (_speed != _defaultSpeed) await _applySpeed();
           if (_error != null) _error = null;
           ok = true;
           _playbackUrl = url;
@@ -456,12 +481,14 @@ class BookPlayer extends ChangeNotifier {
           MediaAction.play,
           MediaAction.pause,
           MediaAction.stop,
+          MediaAction.setSpeed,
         },
         androidCompactActionIndices: const [0, 1, 2],
         processingState: processing,
         playing: playing,
         updatePosition: pos,
         bufferedPosition: dur,
+        speed: _speed,
       ),
     );
   }
@@ -509,6 +536,50 @@ class BookPlayer extends ChangeNotifier {
   Future<void> seekRelative(int seconds) async {
     final target = currentPosition + Duration(seconds: seconds);
     await seek(target < Duration.zero ? Duration.zero : target);
+  }
+
+  // ---------- 播放倍速 ----------
+
+  /// 切换倍速：立即生效、写入本地，并把速率同步给系统媒体会话
+  Future<void> setSpeed(double value) async {
+    final v = value <= 0 ? _defaultSpeed : value;
+    if ((v - _speed).abs() < 0.001) return;
+    _speed = v;
+    await _applySpeed();
+    unawaited(_saveSpeed());
+    AppAnalytics.onEvent('speed_change', {'speed': v});
+    _pushState(force: true);
+    notifyListeners();
+  }
+
+  /// 把当前倍速下发给 media_kit（变速不变调）
+  Future<void> _applySpeed() async {
+    try {
+      await _player.setRate(_speed);
+    } catch (e) {
+      debugPrint('[BookPlayer] 设置倍速失败: $e');
+    }
+  }
+
+  Future<void> _saveSpeed() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_speedKey, _speed);
+    } catch (_) {}
+  }
+
+  /// 启动时恢复上次倍速
+  Future<void> _restoreSpeed() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getDouble(_speedKey);
+      if (v == null || v <= 0 || v == _defaultSpeed) return;
+      _speed = v;
+      await _applySpeed();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[BookPlayer] 恢复倍速失败: $e');
+    }
   }
 
   Future<void> stop() async {
