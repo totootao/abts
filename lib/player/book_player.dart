@@ -42,6 +42,7 @@ class BookPlayer extends ChangeNotifier {
   final Map<int, ({String url, int ts})> _urlCache = {};
   Timer? _positionTimer;
   Timer? _sleepTimer;
+  Timer? _speedApplyTimer;
   Duration _sleepRemaining = Duration.zero;
 
   /// 播放位置（高频，独立于 notifyListeners，避免整页频繁重建）
@@ -55,15 +56,19 @@ class BookPlayer extends ChangeNotifier {
   bool _ducking = false;
   double _volumeBeforeDuck = 1.0;
 
-  /// 可选播放倍速（0.75× ~ 2.00×，步长 0.05，变速不变调）
-  static const List<double> speedOptions = <double>[
-    0.75, 0.80, 0.85, 0.90, 0.95,
-    1.00, 1.05, 1.10, 1.15, 1.20,
-    1.25, 1.30, 1.35, 1.40, 1.45,
-    1.50, 1.55, 1.60, 1.65, 1.70,
-    1.75, 1.80, 1.85, 1.90, 1.95,
-    2.00,
-  ];
+  /// 倍速可调区间与最小步长（滑块按 0.01 取值）
+  static const double minSpeed = 0.75;
+  static const double maxSpeed = 2.0;
+  static const double _speedStep = 0.01;
+
+  /// 四舍五入到 0.01 并夹在合法区间内（消除浮点误差，如 1.1500000000000001）
+  static double normalizeSpeed(double value) {
+    final v = (value / _speedStep).round() * _speedStep;
+    return double.parse(v.toStringAsFixed(2)).clamp(minSpeed, maxSpeed);
+  }
+
+  /// 常用倍速预设（面板底部快捷按钮）
+  static const List<double> speedPresets = <double>[0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
   static const double _defaultSpeed = 1.0;
   static const String _speedKey = 'abts_playback_speed';
 
@@ -538,15 +543,35 @@ class BookPlayer extends ChangeNotifier {
   // ---------- 播放倍速 ----------
 
   /// 切换倍速：立即生效、写入本地，并把速率同步给系统媒体会话
-  Future<void> setSpeed(double value) async {
-    final v = value <= 0 ? _defaultSpeed : value;
-    if ((v - _speed).abs() < 0.001) return;
+  ///
+  /// [interactive] 为 true 表示正在拖动滑块：只更新状态并节流下发速率，
+  /// 不打点、不写盘、不推送媒体会话，避免高频事件把 UI 与播放器线程压满。
+  Future<void> setSpeed(double value, {bool interactive = false}) async {
+    if (value <= 0) value = _defaultSpeed;
+    final v = normalizeSpeed(value);
+    if (v == _speed) return;
     _speed = v;
-    await _applySpeed();
-    unawaited(_saveSpeed());
-    AppAnalytics.onEvent('speed_change', {'speed': v});
-    _pushState(force: true);
+
+    if (interactive) {
+      _scheduleSpeedApply();
+    } else {
+      _speedApplyTimer?.cancel();
+      _speedApplyTimer = null;
+      await _applySpeed();
+      unawaited(_saveSpeed());
+      AppAnalytics.onEvent('speed_change', {'speed': v});
+      _pushState(force: true);
+    }
     notifyListeners();
+  }
+
+  /// 拖动过程中的节流下发：拖动结束后再补一次，保证最终值一定生效
+  void _scheduleSpeedApply() {
+    if (_speedApplyTimer?.isActive ?? false) return;
+    _speedApplyTimer = Timer(const Duration(milliseconds: 80), () {
+      _speedApplyTimer = null;
+      unawaited(_applySpeed());
+    });
   }
 
   /// 把当前倍速下发给 media_kit（变速不变调）
@@ -571,7 +596,7 @@ class BookPlayer extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final v = prefs.getDouble(_speedKey);
       if (v == null || v <= 0 || v == _defaultSpeed) return;
-      _speed = v;
+      _speed = normalizeSpeed(v);
       await _applySpeed();
       notifyListeners();
     } catch (e) {
@@ -581,6 +606,8 @@ class BookPlayer extends ChangeNotifier {
 
   Future<void> stop() async {
     _pausedByInterruption = false;
+    _speedApplyTimer?.cancel();
+    _speedApplyTimer = null;
     await _player.stop();
     unawaited(AudioFocus.instance.abandon());
     _loaded = false;
