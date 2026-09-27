@@ -44,22 +44,28 @@ Future<void> showSpeedSheet(BuildContext context) {
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: BookPlayer.speedOptions.map((v) {
-                      final active = (player.speed - v).abs() < 0.001;
-                      return _SpeedChip(
-                        value: v,
-                        active: active,
-                        onTap: () {
-                          player.setSpeed(v);
-                          Navigator.of(ctx).pop();
-                        },
-                      );
-                    }).toList(),
+                // 档位较多（0.75× ~ 2.00×，步长 0.05），限高后可滚动，避免面板撑满屏幕
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.38,
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: BookPlayer.speedOptions.map((v) {
+                        final active = (player.speed - v).abs() < 0.001;
+                        return _SpeedChip(
+                          value: v,
+                          active: active,
+                          onTap: () {
+                            player.setSpeed(v);
+                            Navigator.of(ctx).pop();
+                          },
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
                 Padding(

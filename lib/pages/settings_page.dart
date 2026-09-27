@@ -106,7 +106,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 14, color: AppTheme.textMain),
             ),
             subtitle: Text(
-              '当前 ${Fmt.speed(player.speed)} · 支持 0.5× ~ 3.0×，变速不变调',
+              '当前 ${Fmt.speed(player.speed)} · 支持 0.75× ~ 2.00×，变速不变调',
               style: TextStyle(fontSize: 12, color: AppTheme.textSub),
             ),
             trailing: Icon(Icons.chevron_right_rounded,

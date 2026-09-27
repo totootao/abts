@@ -55,17 +55,14 @@ class BookPlayer extends ChangeNotifier {
   bool _ducking = false;
   double _volumeBeforeDuck = 1.0;
 
-  /// 可选播放倍速（听书常用区间，变速不变调）
+  /// 可选播放倍速（0.75× ~ 2.00×，步长 0.05，变速不变调）
   static const List<double> speedOptions = <double>[
-    0.5,
-    0.75,
-    1.0,
-    1.25,
-    1.5,
-    1.75,
-    2.0,
-    2.5,
-    3.0,
+    0.75, 0.80, 0.85, 0.90, 0.95,
+    1.00, 1.05, 1.10, 1.15, 1.20,
+    1.25, 1.30, 1.35, 1.40, 1.45,
+    1.50, 1.55, 1.60, 1.65, 1.70,
+    1.75, 1.80, 1.85, 1.90, 1.95,
+    2.00,
   ];
   static const double _defaultSpeed = 1.0;
   static const String _speedKey = 'abts_playback_speed';
