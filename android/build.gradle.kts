@@ -5,6 +5,32 @@ allprojects {
     }
 }
 
+// umeng_common_sdk 1.3.1 同时打包了同名的 Kotlin 空壳与 Java 实现（都叫
+// UmengCommonSdkPlugin），Kotlin 编译器会报 "Redeclaration"。
+// 这里把 Kotlin 空壳从 Kotlin 源集中排除，保留功能完整的 Java 实现。
+// 注意：必须在任何子项目被 evaluate 之前注册，否则 afterEvaluate 会抛异常。
+subprojects {
+    if (name != "umeng_common_sdk") return@subprojects
+    afterEvaluate {
+        val kotlinExt = extensions.findByName("kotlin") ?: return@afterEvaluate
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val sets = kotlinExt.javaClass.getMethod("getSourceSets")
+                .invoke(kotlinExt) as org.gradle.api.NamedDomainObjectContainer<Any>
+            val mainSet = sets.getByName("main")
+            val kotlinDirs = mainSet.javaClass.getMethod("getKotlin").invoke(mainSet)
+            val exclude = kotlinDirs.javaClass.getMethod("exclude", Array<String>::class.java)
+            exclude.invoke(
+                kotlinDirs,
+                *arrayOf<Any>("com/umeng/umeng_common_sdk/UmengCommonSdkPlugin.kt"),
+            )
+            logger.lifecycle("[abts] 已排除 umeng_common_sdk 的重复 Kotlin 空壳")
+        } catch (e: Exception) {
+            logger.warn("[abts] 跳过 umeng Kotlin 源集过滤: ${e.message}")
+        }
+    }
+}
+
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
@@ -26,31 +52,6 @@ subprojects {
     tasks.withType<JavaCompile>().configureEach {
         sourceCompatibility = JavaVersion.VERSION_17.toString()
         targetCompatibility = JavaVersion.VERSION_17.toString()
-    }
-}
-
-// umeng_common_sdk 1.3.1 同时打包了同名的 Kotlin 空壳与 Java 实现（都叫
-// UmengCommonSdkPlugin），Kotlin 编译器会报 "Redeclaration"。
-// 这里把 Kotlin 空壳从 Kotlin 源集中排除，保留功能完整的 Java 实现。
-subprojects {
-    afterEvaluate {
-        if (name != "umeng_common_sdk") return@afterEvaluate
-        val kotlinExt = extensions.findByName("kotlin") ?: return@afterEvaluate
-        try {
-            @Suppress("UNCHECKED_CAST")
-            val sets = kotlinExt.javaClass.getMethod("getSourceSets")
-                .invoke(kotlinExt) as org.gradle.api.NamedDomainObjectContainer<Any>
-            val mainSet = sets.getByName("main")
-            val kotlinDirs = mainSet.javaClass.getMethod("getKotlin").invoke(mainSet)
-            val exclude = kotlinDirs.javaClass.getMethod("exclude", Array<String>::class.java)
-            exclude.invoke(
-                kotlinDirs,
-                *arrayOf<Any>("com/umeng/umeng_common_sdk/UmengCommonSdkPlugin.kt"),
-            )
-            logger.lifecycle("[abts] 已排除 umeng_common_sdk 的重复 Kotlin 空壳")
-        } catch (e: Exception) {
-            logger.warn("[abts] 跳过 umeng Kotlin 源集过滤: ${e.message}")
-        }
     }
 }
 
