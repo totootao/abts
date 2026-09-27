@@ -38,8 +38,12 @@ jobs:
           SM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SM" ]; then
             yes | "$SM" --licenses > /dev/null 2>&1 || true
-            "$SM" --install "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
+            for p in "platforms;android-35" "platforms;android-36" "platforms;android-37" \
+                     "build-tools;35.0.0" "build-tools;36.0.0" "build-tools;37.0.0"; do
+              "$SM" --install "$p" > /dev/null 2>&1 || true
+            done
           fi
+          ls "$ANDROID_HOME/platforms" || true
 
       - name: 拉取依赖
         run: flutter pub get
@@ -65,7 +69,27 @@ jobs:
           fi
 
       - name: 构建按架构分包 APK
-        run: flutter build apk --release --split-per-abi
+        id: build_split
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter build apk --release --split-per-abi 2>&1 | tee build-split.log
+
+      - name: 归档构建日志（便于排查）
+        if: steps.build_split.outcome == 'failure'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-logs
+          mkdir -p logs
+          cp build-split.log "logs/run-${{ github.run_id }}.log"
+          git add logs
+          git commit -m "ci: build log for run ${{ github.run_id }}"
+          git push -f origin ci-logs
+
+      - name: 构建失败则中止
+        if: steps.build_split.outcome == 'failure'
+        run: exit 1
 
       - name: 构建通用包（兼容所有架构）
         run: flutter build apk --release
