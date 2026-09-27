@@ -76,14 +76,25 @@ jobs:
           flutter build apk --release --split-per-abi 2>&1 | tee build-split.log
 
       - name: 归档构建日志（便于排查）
-        if: steps.build_split.outcome == 'failure'
+        if: always()
+        continue-on-error: true
         run: |
+          {
+            echo "=== flutter --version ==="
+            flutter --version 2>&1
+            echo "=== android platforms ==="
+            ls "$ANDROID_HOME/platforms" 2>&1
+            echo "=== gradle wrapper ==="
+            cat android/gradle/wrapper/gradle-wrapper.properties 2>&1
+            echo "=== build log ==="
+            cat build-split.log 2>&1
+          } > ci-diag.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B ci-logs
           mkdir -p logs
-          cp build-split.log "logs/run-${{ github.run_id }}.log"
-          git add logs
+          cp ci-diag.txt "logs/run-${{ github.run_id }}.txt"
+          git add -f logs
           git commit -m "ci: build log for run ${{ github.run_id }}"
           git push -f origin ci-logs
 
