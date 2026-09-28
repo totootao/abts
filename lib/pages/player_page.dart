@@ -12,6 +12,7 @@ import '../player/book_player.dart';
 import '../utils/format.dart';
 import '../widgets/book_cover.dart';
 import '../widgets/speed_sheet.dart';
+import '../widgets/volume_sheet.dart';
 
 /// 全屏播放页（PiliPlus 风格）
 class PlayerPage extends StatefulWidget {
@@ -454,6 +455,33 @@ class _PlayerPageState extends State<PlayerPage> {
               ),
             ),
             onPressed: () => showSpeedSheet(context),
+          ),
+          ActionChip(
+            avatar: Icon(Icons.volume_up_rounded,
+                size: 16,
+                color: player.volumeLevel != 0
+                    ? AppTheme.accent
+                    : AppTheme.textSub),
+            backgroundColor: player.volumeLevel != 0
+                ? AppTheme.accent.withValues(alpha: 0.14)
+                : null,
+            side: player.volumeLevel != 0
+                ? BorderSide(color: AppTheme.accent)
+                : null,
+            label: Text(
+              player.volumeLevel == 0
+                  ? '音量'
+                  : '音量 ${volumeLevelLabel(player.volumeLevel)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: player.volumeLevel != 0
+                    ? AppTheme.accent
+                    : AppTheme.textMain,
+                fontWeight:
+                    player.volumeLevel != 0 ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
+            onPressed: () => showVolumeSheet(context),
           ),
           ActionChip(
             avatar:  Icon(Icons.bedtime_outlined,

@@ -76,6 +76,22 @@ class BookPlayer extends ChangeNotifier {
   double _speed = _defaultSpeed;
   double get speed => _speed;
 
+  /// 音量增减幅等级：正数增幅、负数降幅，0 为关闭（原始音量）。
+  /// 正 N 级 = (100 + 10N)%，负 N 级 = (100 - 10N)%。
+  static const List<int> volumeLevels = <int>[
+    5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9,
+  ];
+  static const int _defaultVolumeLevel = 0;
+  static const String _volumeLevelKey = 'abts_volume_level';
+
+  /// 当前音量增减幅等级（持久化，换章与重启后保持）
+  int _volumeLevel = _defaultVolumeLevel;
+  int get volumeLevel => _volumeLevel;
+
+  /// 目标音量（%）
+  double get _targetVolume =>
+      (100 + 10 * _volumeLevel).clamp(10.0, 200.0).toDouble();
+
   Player get player => _player;
   Book? get book => _book;
   List<Chapter> get chapters => _chapters;
@@ -167,6 +183,8 @@ class BookPlayer extends ChangeNotifier {
 
     // 恢复上次选择的倍速（本地读取，失败则保持 1.0×）
     unawaited(_restoreSpeed());
+    // 恢复上次选择的音量增减幅
+    unawaited(_restoreVolumeLevel());
   }
 
   /// 系统打断（来电等）导致的暂停：不放弃焦点，等待 GAIN 后自动续播
@@ -313,6 +331,8 @@ class BookPlayer extends ChangeNotifier {
           }
           // 换源后重新下发倍速：部分设备 open() 会把播放速率重置为 1.0
           if (_speed != _defaultSpeed) await _applySpeed();
+          // 同理，重新下发音量增减幅
+          if (_volumeLevel != _defaultVolumeLevel) await _applyVolume();
           if (_error != null) _error = null;
           ok = true;
           _playbackUrl = url;
@@ -601,6 +621,55 @@ class BookPlayer extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[BookPlayer] 恢复倍速失败: $e');
+    }
+  }
+
+  // ---------- 音量增减幅 ----------
+
+  /// 设置音量增减幅等级：正数增幅、负数降幅、0 关闭。
+  /// 立即生效、写入本地；增幅通过放宽 mpv volume-max 实现（默认上限 130%）。
+  Future<void> setVolumeLevel(int level) async {
+    final v = level.clamp(-9, 5);
+    if (v == _volumeLevel) return;
+    _volumeLevel = v;
+    await _applyVolume();
+    unawaited(_saveVolumeLevel());
+    AppAnalytics.onEvent('volume_level_change', {'level': v});
+    notifyListeners();
+  }
+
+  /// 把目标音量下发给 media_kit
+  Future<void> _applyVolume() async {
+    try {
+      final p = _player.platform;
+      if (p is NativePlayer) {
+        // mpv 默认 volume-max=130，先放宽到 200 才能支持正五级（150%）
+        await p.setProperty('volume-max', '200');
+      }
+      await _player.setVolume(_targetVolume);
+    } catch (e) {
+      debugPrint('[BookPlayer] 设置音量失败: $e');
+    }
+  }
+
+  Future<void> _saveVolumeLevel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_volumeLevelKey, _volumeLevel);
+    } catch (_) {}
+  }
+
+  /// 启动时恢复上次音量等级
+  Future<void> _restoreVolumeLevel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getInt(_volumeLevelKey);
+      if (v == null || v == _defaultVolumeLevel) return;
+      _volumeLevel = v.clamp(-9, 5);
+      await _applyVolume();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[BookPlayer] 恢复音量等级失败: $e');
     }
   }
 
