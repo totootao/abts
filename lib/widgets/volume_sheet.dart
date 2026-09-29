@@ -52,7 +52,7 @@ Future<void> showVolumeSheet(BuildContext context) {
                               ? Icons.volume_up_rounded
                               : (level < 0
                                   ? Icons.volume_down_rounded
-                                  : Icons.volume_rounded),
+                                  : Icons.volume_off_rounded),
                           size: 18,
                           color: AppTheme.accent,
                         ),
