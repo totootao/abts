@@ -43,6 +43,7 @@ class BookPlayer extends ChangeNotifier {
   Timer? _positionTimer;
   Timer? _sleepTimer;
   Timer? _speedApplyTimer;
+  Timer? _volumeLevelApplyTimer;
   Duration _sleepRemaining = Duration.zero;
 
   /// 播放位置（高频，独立于 notifyListeners，避免整页频繁重建）
@@ -81,6 +82,9 @@ class BookPlayer extends ChangeNotifier {
   static const List<int> volumeLevels = <int>[
     5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9,
   ];
+
+  /// 常用等级快捷值（面板底部按钮）
+  static const List<int> quickVolumeLevels = <int>[-9, -6, -3, 0, 1, 3, 5];
   static const int _defaultVolumeLevel = 0;
   static const String _volumeLevelKey = 'abts_volume_level';
 
@@ -627,15 +631,33 @@ class BookPlayer extends ChangeNotifier {
   // ---------- 音量增减幅 ----------
 
   /// 设置音量增减幅等级：正数增幅、负数降幅、0 关闭。
-  /// 立即生效、写入本地；增幅通过放宽 mpv volume-max 实现（默认上限 130%）。
-  Future<void> setVolumeLevel(int level) async {
+  ///
+  /// [interactive] 为 true 表示正在拖动滑块：只更新状态并节流下发，
+  /// 不打点、不写盘、不推送媒体会话，避免拖动时堆积 mpv 属性请求。
+  Future<void> setVolumeLevel(int level, {bool interactive = false}) async {
     final v = level.clamp(-9, 5);
     if (v == _volumeLevel) return;
     _volumeLevel = v;
-    await _applyVolume();
-    unawaited(_saveVolumeLevel());
-    AppAnalytics.onEvent('volume_level_change', {'level': v});
+
+    if (interactive) {
+      _scheduleVolumeLevelApply();
+    } else {
+      _volumeLevelApplyTimer?.cancel();
+      _volumeLevelApplyTimer = null;
+      await _applyVolume();
+      unawaited(_saveVolumeLevel());
+      AppAnalytics.onEvent('volume_level_change', {'level': v});
+    }
     notifyListeners();
+  }
+
+  /// 拖动过程中的节流下发：拖动结束后再补一次，保证最终值一定生效
+  void _scheduleVolumeLevelApply() {
+    if (_volumeLevelApplyTimer?.isActive ?? false) return;
+    _volumeLevelApplyTimer = Timer(const Duration(milliseconds: 80), () {
+      _volumeLevelApplyTimer = null;
+      unawaited(_applyVolume());
+    });
   }
 
   /// 把目标音量下发给 media_kit
@@ -676,6 +698,8 @@ class BookPlayer extends ChangeNotifier {
   Future<void> stop() async {
     _pausedByInterruption = false;
     _speedApplyTimer?.cancel();
+    _volumeLevelApplyTimer?.cancel();
+    _volumeLevelApplyTimer = null;
     _speedApplyTimer = null;
     await _player.stop();
     unawaited(AudioFocus.instance.abandon());
